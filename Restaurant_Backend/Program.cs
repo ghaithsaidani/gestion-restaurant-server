@@ -13,7 +13,16 @@ builder.Services.AddRouting(options => options.LowercaseUrls = true);
 
 // Dependancy Injection Of DbContext Class
 builder.Services.AddDbContext<ApiDbContext>(option => option.UseSqlServer(builder.Configuration.GetConnectionString("DevConnection")));
-
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(
+        policy =>
+        {
+            policy.WithOrigins("*")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+});
 
 var app = builder.Build();
 
