@@ -1,8 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Restaurant_Backend.Models.RequestTemplates;
 
-namespace Server_Side.Models
+namespace Restaurant_Backend.Models.DbModels
 {
-    public class ApiDbContext:DbContext
+    public class ApiDbContext : DbContext
     {
         public ApiDbContext(DbContextOptions option) : base(option) { }
         public DbSet<Admin> admins { get; set; }

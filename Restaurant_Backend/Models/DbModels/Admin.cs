@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Server_Side.Models
+namespace Restaurant_Backend.Models.DbModels
 {
     public class Admin
     {

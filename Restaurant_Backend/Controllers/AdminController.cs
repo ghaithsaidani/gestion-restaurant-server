@@ -12,8 +12,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Server_Side.Models;
 using System.Security.Cryptography;
+using Restaurant_Backend.Models.DbModels;
+using Restaurant_Backend.Models.RequestTemplates;
+using Utilities;
+using Restaurant_Backend.Controllers;
+using NuGet.Common;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Server_Side.Controllers
 {
@@ -42,7 +47,7 @@ namespace Server_Side.Controllers
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginModel.Password, user.Password);
             if (isPasswordValid)
             {
-                string tokenString = GenerateToken(secretKey, user.ID.ToString());
+                string tokenString = TokenTools.GenerateToken(secretKey, user.ID.ToString());
                 var token = new TokenExist
                 {
                     Token = tokenString
@@ -85,7 +90,7 @@ namespace Server_Side.Controllers
         [HttpGet("logout")]
         public async Task<ActionResult> LogoutAdmin([FromHeader(Name = "AUTHORIZATION")] string token)
         {
-            if (ValidateToken(token, secretKey))
+            if (TokenTools.ValidateToken(token, secretKey,_context))
             {
                 var givenToken = await _context.tokenExists.FirstOrDefaultAsync(t => t.Token == token);
                 if (givenToken == null)
@@ -101,6 +106,7 @@ namespace Server_Side.Controllers
             return Unauthorized("INVALID TOKEN !");
 
         }
+
         [HttpPost("sendPassRecoveryLink")]
         public async Task<ActionResult> SendPassRecoveryAdmin([FromBody] SendMailModel mailModel)
         {
@@ -119,7 +125,7 @@ namespace Server_Side.Controllers
 
             // Compose the email
             string subject = "Password Recovery";
-            string body = $"Hello, this is recovery pasword mail and hashed ID is {Encrypt(user.ID.ToString(), hashkey)}";
+            string body = $"Hello, this is recovery pasword mail and hashed ID is {Crypt.Encrypt(user.ID.ToString(), hashkey)}";
 
             // Configure SmtpClient
             using (var client = new SmtpClient("smtp.gmail.com"))
@@ -153,12 +159,14 @@ namespace Server_Side.Controllers
                 }
             }
         }
+
+
         [HttpPut("changePassword")]
         public async Task<ActionResult> ChangePassword([FromQuery(Name = "id")] string id,[FromBody]RecoveryPasswordModel recoveryPassword)
         {
             try
             {
-                string userId = Decrypt(id, hashkey);
+                string userId = Crypt.Decrypt(id, hashkey);
                 var user = await _context.admins.FindAsync(int.Parse(userId));
                 if (user == null)
                 {
@@ -181,7 +189,7 @@ namespace Server_Side.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Admin>>> Getadmins([FromHeader(Name = "AUTHORIZATION")] string token)
         {
-            if (ValidateToken(token, secretKey))
+            if (TokenTools.ValidateToken(token, secretKey, _context))
             {
                 return await _context.admins.ToListAsync();
             }
@@ -192,51 +200,56 @@ namespace Server_Side.Controllers
 
         // GET: api/Admin/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Admin>> GetAdmin(int id)
+        public async Task<ActionResult<Admin>> GetAdmin([FromHeader(Name = "AUTHORIZATION")] string token,int id)
         {
-            var admin = await _context.admins.FindAsync(id);
-
-            if (admin == null)
+            if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                return NotFound();
-            }
+                var admin = await _context.admins.FindAsync(id);
 
-            return admin;
+                if (admin == null)
+                {
+                    return NotFound();
+                }
+
+                return admin;
+            }
+            return Unauthorized("INVALID TOKEN !");
+
         }
 
         // PUT: api/Admin/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutAdmin(int id, Admin admin)
+        public async Task<IActionResult> PutAdmin([FromHeader(Name = "AUTHORIZATION")] string token, int id,[FromBody] UpdateModel updateModel)
         {
-            if (id != admin.ID)
+            if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                return BadRequest();
-            }
-
-            _context.Entry(admin).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!AdminExists(id))
+                var admin = await _context.admins.FindAsync(id);
+                if (admin == null)
                 {
-                    return NotFound();
+                    return NotFound("User Not Found !");
                 }
-                else
-                {
-                    throw;
-                }
-            }
 
-            return NoContent();
+                admin.Nom = updateModel.Nom != "" ? updateModel.Nom : admin.Nom;
+                admin.Prenom = updateModel.Prenom != "" ? updateModel.Prenom : admin.Prenom;
+                admin.Telephone = updateModel.Telephone != "" ? updateModel.Telephone : admin.Telephone;
+                admin.Adresse = updateModel.Adresse != "" ? updateModel.Adresse : admin.Adresse;
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return BadRequest("Error");
+                }
+
+                return Ok("User Updated !");
+            }
+            return Unauthorized("INVALID TOKEN !");
         }
 
         // DELETE: api/Admin/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteAdmin(int id)
+        public async Task<IActionResult> DeleteAdmin([FromHeader(Name = "AUTHORIZATION")] string token, int id)
         {
             var admin = await _context.admins.FindAsync(id);
             if (admin == null)
@@ -249,116 +262,9 @@ namespace Server_Side.Controllers
 
             return NoContent();
         }
-
-        private bool AdminExists(int id)
-        {
-            return _context.admins.Any(e => e.ID == id);
-        }
-        private bool TokenExist(string token)
-        {
-            return _context.tokenExists.Any(e => e.Token == token);
-        }
-        private bool ValidateToken(string token, string secretKey)
-        {
-            if (!TokenExist(token))
-            {
-                return false;
-            }
-            else
-            {
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var validationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                };
-
-                SecurityToken validatedToken;
-                ClaimsPrincipal principal;
-
-                try
-                {
-                    principal = tokenHandler.ValidateToken(token, validationParameters, out validatedToken);
-                }
-                catch
-                {
-                    // Token validation failed
-                    return false;
-                }
-
-                // Token is valid; you can now access the claims from the principal
-                return true;
-            }
-
-        }
-        private string GenerateToken(string secretKey, string idForClaim)
-        {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(secretKey);
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
-            {
-                    new Claim("Id", idForClaim),
-                }),
-                Expires = DateTime.UtcNow.AddDays(1), // Token expiration time
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
-            return tokenString;
-        }
-
-
-        public static string Encrypt(string clearText, string EncryptionKey)
-        {
-            byte[] clearBytes = Encoding.Unicode.GetBytes(clearText);
-            using (Aes encryptor = Aes.Create())
-            {
-                Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(EncryptionKey, new byte[] { 0x49, 0x76, 0x61, 0x6e, 0x20, 0x4d, 0x65, 0x64, 0x76, 0x65, 0x64, 0x65, 0x76 });
-                encryptor.Key = pdb.GetBytes(32);
-                encryptor.IV = pdb.GetBytes(16);
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    using (CryptoStream cs = new CryptoStream(ms, encryptor.CreateEncryptor(), CryptoStreamMode.Write))
-                    {
-                        cs.Write(clearBytes, 0, clearBytes.Length);
-                        cs.Close();
-                    }
-                    clearText = Convert.ToBase64String(ms.ToArray());
-                }
-            }
-            return clearText;
-        }
-
-        public static string Decrypt(string cipherText, string EncryptionKey)
-        {
-            cipherText = cipherText.Replace(" ", "+");
-            byte[] cipherBytes = Convert.FromBase64String(cipherText);
-            using (Aes encryptor = Aes.Create())
-            {
-                Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(EncryptionKey, new byte[] { 0x49, 0x76, 0x61, 0x6e, 0x20, 0x4d, 0x65, 0x64, 0x76, 0x65, 0x64, 0x65, 0x76 });
-                encryptor.Key = pdb.GetBytes(32);
-                encryptor.IV = pdb.GetBytes(16);
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    using (CryptoStream cs = new CryptoStream(ms, encryptor.CreateDecryptor(), CryptoStreamMode.Write))
-                    {
-                        cs.Write(cipherBytes, 0, cipherBytes.Length);
-                        cs.Close();
-                    }
-                    cipherText = Encoding.Unicode.GetString(ms.ToArray());
-                }
-            }
-            return cipherText;
-        }
-
-
-
-
-
+        
+        
+        
     }
 }
 

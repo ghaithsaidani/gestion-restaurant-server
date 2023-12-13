@@ -1,4 +1,4 @@
-﻿namespace Server_Side.Models
+﻿namespace Restaurant_Backend.Models.RequestTemplates
 {
     public class RecoveryPasswordModel
     {
