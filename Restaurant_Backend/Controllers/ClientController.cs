@@ -73,7 +73,7 @@ namespace Server_Side.Controllers
             };
             _context.clients.Add(newClient);
             await _context.SaveChangesAsync();
-            return CreatedAtAction("GetAdmin", new { id = newClient.ID }, newClient);
+            return CreatedAtAction("GetClient", new { id = newClient.ID }, newClient);
 
         }
 
@@ -98,7 +98,7 @@ namespace Server_Side.Controllers
         }
 
         [HttpPost("sendPassRecoveryLink")]
-        public async Task<ActionResult> SendPassRecoveryAdmin([FromBody] SendMailModel mailModel)
+        public async Task<ActionResult> SendPassRecoveryClient([FromBody] SendMailModel mailModel)
         {
             var user = await _context.clients.FirstOrDefaultAsync(u => u.Email == mailModel.Email);
             if (user == null)
