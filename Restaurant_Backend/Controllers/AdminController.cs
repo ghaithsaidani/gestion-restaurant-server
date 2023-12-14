@@ -125,7 +125,7 @@ namespace Server_Side.Controllers
 
             // Compose the email
             string subject = "Password Recovery";
-            string body = $"Hello, this is recovery pasword mail and hashed ID is {Crypt.Encrypt(user.ID.ToString(), hashkey)}";
+            string body = $"Hello, to reset your password follow this link : http://localhost:4200/auth/change-password?id={Crypt.Encrypt(user.ID.ToString(), hashkey)}";
 
             // Configure SmtpClient
             using (var client = new SmtpClient("smtp.gmail.com"))
