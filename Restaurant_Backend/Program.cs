@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Restaurant_Backend.Models.DbModels;
+using Restaurant_Backend.Models.RealTimeCommunication;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,22 +12,28 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
+builder.Services.AddSignalR();
 
 // Dependancy Injection Of DbContext Class
 builder.Services.AddDbContext<ApiDbContext>(option => option.UseSqlServer(builder.Configuration.GetConnectionString("DevConnection")));
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(
+    options.AddPolicy("CorsPolicy",
         policy =>
         {
-            policy.WithOrigins("*")
+            policy.WithOrigins("http://localhost:4200")
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                .AllowCredentials();
         });
 });
 
 var app = builder.Build();
-app.UseCors();
+
+app.UseCors("CorsPolicy");
+
+app.MapHub<UpdateHub>("/api/updateHub");
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -35,7 +43,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseAuthorization();
-
+app.UseStaticFiles();
 app.MapControllers();
 
 app.Run();

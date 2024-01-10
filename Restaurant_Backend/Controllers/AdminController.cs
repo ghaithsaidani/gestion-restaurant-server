@@ -1,24 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
-using System.Net.Mail;
+﻿using System.Net.Mail;
 using System.Net;
-using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
-using BCrypt.Net;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography;
 using Restaurant_Backend.Models.DbModels;
 using Restaurant_Backend.Models.RequestTemplates;
-using Utilities;
-using Restaurant_Backend.Controllers;
-using NuGet.Common;
-using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.SignalR;
+using Restaurant_Backend.Models.RealTimeCommunication;
+using Restaurant_Backend.Controllers.Tools;
 
 namespace Server_Side.Controllers
 {
@@ -27,12 +15,17 @@ namespace Server_Side.Controllers
     public class AdminController : ControllerBase
     {
         private readonly ApiDbContext _context;
+        private readonly IHubContext<UpdateHub> _hubContext;
         private readonly string secretKey = "sesame_bytes_want_to_crypt_this_so_do__it_right___now!";
         private readonly string hashkey = "NPLb3uBmXV4Tvr5u-Vg09iwGX_DLkHMozv1Q3NWUDR0=";
+        private readonly IWebHostEnvironment _hostingEnvironment;
 
-        public AdminController(ApiDbContext context)
+        public AdminController(ApiDbContext context, IHubContext<UpdateHub> hubContext, IWebHostEnvironment hostingEnvironment)
         {
             _context = context;
+            _hubContext = hubContext;
+            _hostingEnvironment = hostingEnvironment;
+
         }
         //LoginAdmin
 
@@ -47,14 +40,15 @@ namespace Server_Side.Controllers
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginModel.Password, user.Password);
             if (isPasswordValid)
             {
-                string tokenString = TokenTools.GenerateToken(secretKey, user.ID.ToString());
+                string tokenString = TokenTools.GenerateToken(secretKey, user.ID.ToString(),"admin");
                 var token = new TokenExist
                 {
                     Token = tokenString
                 };
                 _context.tokenExists.Add(token);
                 _context.SaveChanges();
-                return Ok(new { Jwt = tokenString });
+                TokenTools.SetCookie("jwt", tokenString, Response);
+                return Ok(user);
             }
             return BadRequest("Invalid Credentials");
 
@@ -82,26 +76,38 @@ namespace Server_Side.Controllers
             };
             _context.admins.Add(newAdmin);
             await _context.SaveChangesAsync();
+
+            //// SignalR TEST BEGIN            
+
+            await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
+
+            //// SignalR TEST ENDS  
+
             return CreatedAtAction("GetAdmin", new { id = newAdmin.ID }, newAdmin);
 
         }
         // Logout
 
         [HttpGet("logout")]
-        public async Task<ActionResult> LogoutAdmin([FromHeader(Name = "AUTHORIZATION")] string token)
+        public async Task<ActionResult> LogoutAdmin()
         {
-            if (TokenTools.ValidateToken(token, secretKey,_context))
+            string token = TokenTools.GetCookie("jwt", Request);
+            if(token != "")
             {
-                var givenToken = await _context.tokenExists.FirstOrDefaultAsync(t => t.Token == token);
-                if (givenToken == null)
+                if (TokenTools.ValidateToken(token, secretKey, _context))
                 {
-                    return Unauthorized("INVALID TOKEN !");
+                    var givenToken = await _context.tokenExists.FirstOrDefaultAsync(t => t.Token == token);
+                    if (givenToken == null)
+                    {
+                        return Unauthorized("INVALID TOKEN !");
+                    }
+                    _context.tokenExists.Remove(givenToken);
+                    TokenTools.DeleteCookie("jwt", Response);
+                    await _context.SaveChangesAsync();
+                    return Ok("Logout Successfuly");
+
+
                 }
-                _context.tokenExists.Remove(givenToken);
-                await _context.SaveChangesAsync();
-                return Ok("Logout Successfuly");
-
-
             }
             return Unauthorized("INVALID TOKEN !");
 
@@ -162,7 +168,7 @@ namespace Server_Side.Controllers
 
 
         [HttpPut("changePassword")]
-        public async Task<ActionResult> ChangePassword([FromQuery(Name = "id")] string id,[FromBody]RecoveryPasswordModel recoveryPassword)
+        public async Task<ActionResult> ChangePassword([FromQuery(Name = "id")] string id, [FromBody] RecoveryPasswordModel recoveryPassword)
         {
             try
             {
@@ -181,26 +187,30 @@ namespace Server_Side.Controllers
             {
                 return BadRequest("Invalid User !");
             }
-            
+
         }
 
 
         // GET: api/Admin
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Admin>>> Getadmins([FromHeader(Name = "AUTHORIZATION")] string token)
+        public async Task<ActionResult<IEnumerable<Admin>>> Getadmins()
         {
+            string token = TokenTools.GetCookie("jwt", Request);
+            
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
                 return await _context.admins.ToListAsync();
             }
             return Unauthorized("INVALID TOKEN !");
+            
+            //return await _context.admins.ToListAsync();
 
 
         }
 
         // GET: api/Admin/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Admin>> GetAdmin([FromHeader(Name = "AUTHORIZATION")] string token,int id)
+        public async Task<ActionResult<Admin>> GetAdmin([FromHeader(Name = "AUTHORIZATION")] string token, int id)
         {
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
@@ -219,8 +229,9 @@ namespace Server_Side.Controllers
 
         // PUT: api/Admin/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutAdmin([FromHeader(Name = "AUTHORIZATION")] string token, int id,[FromBody] UpdateModel updateModel)
+        public async Task<IActionResult> PutAdmin([FromHeader(Name = "AUTHORIZATION")] string token, int id, [FromBody] UpdateModel updateModel)
         {
+            /*
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
                 var admin = await _context.admins.FindAsync(id);
@@ -245,6 +256,38 @@ namespace Server_Side.Controllers
                 return Ok("User Updated !");
             }
             return Unauthorized("INVALID TOKEN !");
+            */
+
+            var admin = await _context.admins.FindAsync(id);
+            if (admin == null)
+            {
+                return NotFound("User Not Found !");
+            }
+
+            admin.Nom = updateModel.Nom != "" ? updateModel.Nom : admin.Nom;
+            admin.Prenom = updateModel.Prenom != "" ? updateModel.Prenom : admin.Prenom;
+            admin.Telephone = updateModel.Telephone != "" ? updateModel.Telephone : admin.Telephone;
+            admin.Adresse = updateModel.Adresse != "" ? updateModel.Adresse : admin.Adresse;
+            try
+            {
+                await _context.SaveChangesAsync();
+
+
+                //// SignalR TEST BEGIN            
+
+                await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
+
+                //// SignalR TEST ENDS  
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return BadRequest("Error");
+            }
+
+            return Ok("User Updated !");
+
+
+
         }
 
         // DELETE: api/Admin/5
@@ -260,12 +303,22 @@ namespace Server_Side.Controllers
             _context.admins.Remove(admin);
             await _context.SaveChangesAsync();
 
-            return NoContent();
+
+            //// SignalR TEST BEGIN            
+
+            await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
+
+            //// SignalR TEST ENDS  
+
+            return Ok("Admin removed");
         }
+
+
+
         
-        
-        
+
     }
+
 }
 
 

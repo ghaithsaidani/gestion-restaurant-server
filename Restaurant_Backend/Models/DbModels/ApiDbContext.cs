@@ -9,5 +9,6 @@ namespace Restaurant_Backend.Models.DbModels
         public DbSet<Admin> admins { get; set; }
         public DbSet<Client> clients { get; set; }
         public DbSet<TokenExist> tokenExists { get; set; }
+        public DbSet<Dish> dishes { get; set; }
     }
 }

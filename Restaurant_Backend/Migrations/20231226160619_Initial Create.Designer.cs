@@ -6,13 +6,12 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Restaurant_Backend.Models.DbModels;
 
-
 #nullable disable
 
 namespace Restaurant_Backend.Migrations
 {
     [DbContext(typeof(ApiDbContext))]
-    [Migration("20231207191654_Initial Create")]
+    [Migration("20231226160619_Initial Create")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -25,7 +24,7 @@ namespace Restaurant_Backend.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Server_Side.Models.Admin", b =>
+            modelBuilder.Entity("Restaurant_Backend.Models.DbModels.Admin", b =>
                 {
                     b.Property<int>("ID")
                         .ValueGeneratedOnAdd()
@@ -62,7 +61,7 @@ namespace Restaurant_Backend.Migrations
                     b.ToTable("admins");
                 });
 
-            modelBuilder.Entity("Server_Side.Models.Client", b =>
+            modelBuilder.Entity("Restaurant_Backend.Models.DbModels.Client", b =>
                 {
                     b.Property<int>("ID")
                         .ValueGeneratedOnAdd()
@@ -99,7 +98,36 @@ namespace Restaurant_Backend.Migrations
                     b.ToTable("clients");
                 });
 
-            modelBuilder.Entity("Server_Side.Models.TokenExist", b =>
+            modelBuilder.Entity("Restaurant_Backend.Models.DbModels.Dish", b =>
+                {
+                    b.Property<int>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ID"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Image")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(250)");
+
+                    b.HasKey("ID");
+
+                    b.ToTable("dishes");
+                });
+
+            modelBuilder.Entity("Restaurant_Backend.Models.RequestTemplates.TokenExist", b =>
                 {
                     b.Property<int>("ID")
                         .ValueGeneratedOnAdd()

@@ -1,17 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Mail;
+﻿using System.Net.Mail;
 using System.Net;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Restaurant_Backend.Controllers;
 using Restaurant_Backend.Models.DbModels;
 using Restaurant_Backend.Models.RequestTemplates;
-using Utilities;
-using NuGet.Common;
+using Restaurant_Backend.Controllers.Tools;
 
 namespace Server_Side.Controllers
 {
@@ -39,7 +32,7 @@ namespace Server_Side.Controllers
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginModel.Password, user.Password);
             if (isPasswordValid)
             {
-                string tokenString = TokenTools.GenerateToken(secretKey, user.ID.ToString());
+                string tokenString = TokenTools.GenerateToken(secretKey, user.ID.ToString(),"client");
                 var token = new TokenExist
                 {
                     Token = tokenString

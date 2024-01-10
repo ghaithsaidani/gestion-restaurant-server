@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Utilities
+namespace Restaurant_Backend.Controllers.Tools
 {
     public class Crypt
     {
