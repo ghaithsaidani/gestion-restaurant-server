@@ -1,141 +1,134 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Restaurant_Backend.Controllers.Tools;
 using Restaurant_Backend.Models.DbModels;
 using Restaurant_Backend.Models.RealTimeCommunication;
 using Restaurant_Backend.Models.RequestTemplates;
-using System;
-using System.IO;
 
 namespace Restaurant_Backend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class DisheController : ControllerBase
+    public class TableController : ControllerBase
     {
         private readonly ApiDbContext _context;
         private readonly IHubContext<UpdateHub> _hubContext;
         private readonly string secretKey = "sesame_bytes_want_to_crypt_this_so_do__it_right___now!";
-        private readonly IWebHostEnvironment _hostingEnvironment;
 
-        public DisheController(ApiDbContext context, IHubContext<UpdateHub> hubContext, IWebHostEnvironment hostingEnvironment)
+        public TableController(ApiDbContext context, IHubContext<UpdateHub> hubContext, IWebHostEnvironment hostingEnvironment)
         {
             _context = context;
             _hubContext = hubContext;
-            _hostingEnvironment = hostingEnvironment;
         }
 
+        // GET: api/Table
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Dish>>> Getdishes()
+        public async Task<ActionResult<IEnumerable<Table>>> Gettables()
         {
             string token = TokenTools.GetCookie("jwt", Request);
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                return await _context.dishes.ToListAsync();
+                return await _context.tables.ToListAsync();
             }
             return Unauthorized("INVALID TOKEN !");
-
         }
+
+        // GET: api/Table/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Dish>> GetDish(string id)
+        public async Task<ActionResult<Table>> GetTable(string id)
         {
             string token = TokenTools.GetCookie("jwt", Request);
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                var dish = await _context.dishes.FindAsync(id);
+                var table = await _context.tables.FindAsync(int.Parse(id));
 
-                if (dish == null)
+                if (table == null)
                 {
                     return NotFound();
                 }
-                return dish;
+                return table;
             }
             return Unauthorized("INVALID TOKEN !");
         }
 
+        // PUT: api/Table/5
         [HttpPut]
-        public async Task<IActionResult> PutDish([FromQuery(Name ="id")] string id, DishModel dishModel)
+        public async Task<IActionResult> PutTable([FromQuery(Name = "id")] string id, TableModel tableModel)
         {
             string token = TokenTools.GetCookie("jwt", Request);
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                var dish = await _context.dishes.FindAsync(int.Parse(id));
-                if(dish == null)
+                var table = await _context.tables.FindAsync(int.Parse(id));
+                if (table == null)
                 {
                     return NotFound("Dish Not Found !");
                 }
+
+                table.Places = (int)(tableModel.Places != null ? tableModel.Places : table.Places);
+                table.IsReserved = (bool)(tableModel.IsReserved != null ? tableModel.IsReserved : table.IsReserved);
                 
-                dish.Title = dishModel.Title != "" ? dishModel.Title : dish.Title;
-                dish.Type = dishModel.Type != "" ? dishModel.Type : dish.Type;
-                dish.Description = dishModel.Description != "" ? dishModel.Description : dish.Description;
-                if (dishModel.Image != null)
-                {
-                    UploadFile.DeleteImage(_hostingEnvironment, dish.Image);
-                    Random random = new Random();
-                    string fileName = $"{DateTime.Today.ToString("yyyy-MM-dd")}_{random.Next()}";
-                    dish.Image = await UploadFile.UploadImage(dishModel.Image, _hostingEnvironment, fileName);
-                }
                 try
                 {
                     await _context.SaveChangesAsync();
-                    
+
                     await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
                 }
                 catch (DbUpdateConcurrencyException)
                 {
                     return BadRequest("Error");
                 }
-                return Ok(dish);
+                return Ok(table);
             }
             return Unauthorized("INVALID TOKEN !");
         }
 
+        // POST: api/Table
         [HttpPost]
-        public async Task<ActionResult> PostDish(DishModel dishModel)
+        public async Task<ActionResult<Table>> PostTable(TableModel tableModel)
         {
             string token = TokenTools.GetCookie("jwt", Request);
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                Random random = new Random();
-                string fileName = $"{DateTime.Today.ToString("yyyy-MM-dd")}_{random.Next()}";
-                string pathImage = await UploadFile.UploadImage(dishModel.Image, _hostingEnvironment, fileName);
-                var newDish = new Dish
+                var newTable = new Table
                 {
-                    Title = dishModel.Title,
-                    Type = dishModel.Type,
-                    Description = dishModel.Description,
-                    Image = pathImage
+                    Places = (int) (tableModel.Places != null ? tableModel.Places : 0) ,
+                    IsReserved = (bool) (tableModel.IsReserved != null ? tableModel.IsReserved : false)
                 };
-                _context.dishes.Add(newDish);
+                _context.tables.Add(newTable);
                 await _context.SaveChangesAsync();
                 await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
-                return CreatedAtAction("GetDish", new { id = newDish.ID }, newDish);
+                return CreatedAtAction("GetTable", new { id = newTable.ID }, newTable);
             }
             return Unauthorized("INVALID TOKEN !");
-
         }
 
+        // DELETE: api/Table/5
         [HttpDelete]
-        public async Task<IActionResult> DeleteDish([FromQuery(Name ="id")] string id)
+        public async Task<IActionResult> DeleteTable([FromQuery(Name = "id")] string id)
         {
             string token = TokenTools.GetCookie("jwt", Request);
             if (TokenTools.ValidateToken(token, secretKey, _context))
             {
-                var dish = await _context.dishes.FindAsync(int.Parse(id));
-                if (dish == null)
+                var table = await _context.tables.FindAsync(int.Parse(id));
+                if (table == null)
                 {
                     return NotFound("Dish not exist");
                 }
 
-                _context.dishes.Remove(dish);
-                UploadFile.DeleteImage(_hostingEnvironment, dish.Image);
+                _context.tables.Remove(table);
                 await _context.SaveChangesAsync();
                 await _hubContext.Clients.All.SendAsync("sendUpdate", "Record updated");
 
-                return Ok(dish);
+                return Ok(table);
             }
             return Unauthorized("INVALID TOKEN !");
         }
+
     }
 }
